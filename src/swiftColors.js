@@ -9,20 +9,39 @@ function getColorsSwiftSnippet(context, forExport) {
   const colors = utils.getResources(context, "colors");
 
   //Loop on every color
-  var colorsCode = "";
+  var structColors = "";
+  var extensionColorsCode = "";
+  var protocolColorsCode = "";
+  var colorName = "";
   for (var color of colors){
-    colorsCode += utils.tab(2) + getColorDeclarationSwiftCode(context, color, forExport) + "\n";
+    colorName = getColorNameSwiftCode(context, color, forExport);
+    structColors += utils.tab(1) + getColorDeclarationSwiftCode(context, color, forExport) + "\n";
+    extensionColorsCode += utils.tab(1) + `static var ${colorName}: UIColor { UIColor.currentStyle.${colorName}}`+ "\n";
+    protocolColorsCode += utils.tab(1) + `var ${colorName}: UIColor { get }`+ "\n";
   }
 
   //Wrap colors code in an extension
-  var code = "extension " + getColorSwiftType(context, forExport) + " {\n";
-  code += utils.tab(1) + "struct " + getColorStructName(context) + " {\n";
-  code += colorsCode;
-  code += utils.tab(1) + "}\n";
-  code += "}";
+  var code = "";
+  code += "\nextension " + getColorSwiftType(context, forExport) + " {\n";
+  code += utils.tab(1) + "public static var currentStyle: IColorStyle = DefaultStyle()\n\n";
+  code += extensionColorsCode;
+  code += "}\n";
 
+  code += "\n\n";
+  code += "public protocol IColorStyle {\n";
+  code += protocolColorsCode;
+  code += "}\n";
+
+  code += "\n\n";
+  code += utils.tab(0) + "public struct DefaultStyle: IColorStyle {\n";
+  code += structColors;
+  code += utils.tab(0) + "}";
   return code;
 }
+
+
+
+
 
 function getColorsSwiftFileContent(context) {
   //Add import to the snippet
@@ -43,7 +62,7 @@ function getColorsSwiftFileContent(context) {
 
 function getExistingColorSwiftCode(context, color, forExport) {
   const colorSwiftType = getColorSwiftType(context, forExport)
-  return `${colorSwiftType}.${getColorStructName(context)}.${camelCase(color.name)}`;
+  return `${colorSwiftType}.${camelCase(color.name)}`;
 }
 
 function getColorSwiftCode(context, color, forExport) {
@@ -89,8 +108,11 @@ function getColorSwiftType(context, forExport) {
   return "UIColor";
 }
 
+function getColorNameSwiftCode(context, color, forExport) {
+  return `${camelCase(color.name)}`
+}
 function getColorDeclarationSwiftCode(context, color, forExport) {
-  return `static let ${camelCase(color.name)} = ${getColorSwiftCode(context, color, forExport)}`;
+  return `let ${getColorNameSwiftCode(context, color, forExport)} = ${getColorSwiftCode(context, color, forExport)}`;
 }
 
 function getSwiftHexInitParameterName(alphaFirst) {

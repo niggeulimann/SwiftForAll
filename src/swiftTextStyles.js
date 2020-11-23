@@ -15,9 +15,11 @@ function getTextStylesSwiftFileContent(context) {
 function getTextStylesSwiftSnippet(context, forExport) {
   const textStyles = utils.getResources(context, "textStyles");
   var code = "";
+  code += "import UIKit.UIFont\n\n";
   code += getEnumCode(textStyles) + "\n\n";
-  code += getFontColorExtension(context, textStyles, forExport) + "\n\n";
+  code += getProtocolStrubs() + "\n\n";
   code += getFontsExtension(context, textStyles, forExport) + "\n\n"; 
+  code += getFontColorExtension(context, textStyles, forExport) + "\n\n";
   code += getKerningExtension(context, textStyles, forExport) + "\n\n";
   code += getLineHeightExtension(context, textStyles, forExport) + "\n\n";
     
@@ -75,7 +77,7 @@ function getFontSwiftType(context, forExport) {
 }
 
 function getEnumCode(textStyles) {
-  var code = "enum TextStyle {\n";
+  var code = "public enum TextStyle {\n";
 
   for(var textStyle of textStyles) {
     code += utils.tab(1) + "case " + camelCase(textStyle.name) + "(color: UIColor? = nil)\n";
@@ -103,6 +105,34 @@ function getEnumCode(textStyles) {
   return code;
 }
 
+function getProtocolStrubs(){
+  var code = ""
+  code += "\n";
+  code += "\n";
+  code += "public protocol IStyleProvider {\n";
+  code += utils.tab(1) + "func fontFor(style: TextStyle) -> UIFont?\n";
+  code += utils.tab(1) + "func lineHeightMultipleFor(style: TextStyle) -> CGFloat\n";
+  code += utils.tab(1) + "func kerningFor(style: TextStyle) -> CGFloat?\n";
+  code += utils.tab(1) + "func defaultColorFor(style: TextStyle) -> UIColor?\n";
+  code += "}\n";
+  code += "\n";
+  code += "\n";
+  code += "public extension TextStyle {\n";
+  code += utils.tab(1) + "static var provider: IStyleProvider? = DefaultTextStyleProvider()\n";
+  code += utils.tab(1) + "var font: UIFont? {\n";
+  code += utils.tab(2) + "TextStyle.provider?.fontFor(style: self)\n";
+  code += utils.tab(1) + "}\n";
+  code += utils.tab(1) + "var kerning: CGFloat? {\n";
+  code += utils.tab(2) + "TextStyle.provider?.kerningFor(style: self)\n";
+  code += utils.tab(1) + "}\n";
+  code += utils.tab(1) + "var lineHeightMultiple: CGFloat {\n";
+  code += utils.tab(2) + "TextStyle.provider?.lineHeightMultipleFor(style: self) ?? 1\n";
+  code += utils.tab(1) + "}\n";
+  code += "}\n";
+  return code;
+
+}
+
 function getAllAttributesCode(context, textStyles, forExport) {
   var code = "var attributes: [NSAttributedString.Key: Any] {\n";
 
@@ -124,8 +154,8 @@ function getAllAttributesCode(context, textStyles, forExport) {
 function getFontsExtension(context, textStyles, forExport) {
   
   const fontType = getFontSwiftType(context, forExport);
-  var code = "extension Provider {\n";
-  code += utils.tab(1) + "func fontFor(style: TextStyle) -> "+fontType+"? {\n";
+  var code = "public class DefaultTextStyleProvider : IStyleProvider {\n";
+  code += utils.tab(1) + "public func fontFor(style: TextStyle) -> "+fontType+"? {\n";
   
     
   if (textStyles.length == 0) {
@@ -152,7 +182,7 @@ function getFontsExtension(context, textStyles, forExport) {
 
 function getKerningExtension(context, textStyles, forExport) {
   
-  var code = "extension Provider {\n";
+  var code = "public extension DefaultTextStyleProvider {\n";
   code += utils.tab(1) + "func kerningFor(style: TextStyle) -> CGFloat? {\n";
    
   if (textStyles.length == 0) {
@@ -194,7 +224,7 @@ function getKerningExtension(context, textStyles, forExport) {
 function getLineHeightExtension(context, textStyles, forExport) {
   
   
-  var code = "extension Provider {\n";
+  var code = "public extension DefaultTextStyleProvider {\n";
   code += utils.tab(1) + "func lineHeightMultipleFor(style: TextStyle) -> CGFloat {\n";
    
   
@@ -236,7 +266,7 @@ function getLineHeightExtension(context, textStyles, forExport) {
 
 function getFontColorExtension(context, textStyles, forExport) {
   
-  var code = "extension Provider {\n";
+  var code = "public extension DefaultTextStyleProvider {\n";
   code += utils.tab(1) + "func defaultColorFor(style: TextStyle) -> UIColor? {\n";
   
   if (textStyles.length == 0) {
