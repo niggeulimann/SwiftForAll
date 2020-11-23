@@ -8,16 +8,19 @@ var swiftColors = require('./swiftColors.js')
 function getTextStylesSwiftFileContent(context) {
   var code = getSwiftFontImportCode(context) + "\n\n";
   code += getTextStylesSwiftSnippet(context, true) + "\n\n";
-  code += getSwiftConvenienceStringExt();
+  code += getSwiftConvenienceStringExtensions();
   return code
 }
 
 function getTextStylesSwiftSnippet(context, forExport) {
   const textStyles = utils.getResources(context, "textStyles");
-  var code = getEnumCode(textStyles) + "\n\n";
-  code += "extension TextStyle {\n";
-  code += utils.tab(1) + getAllAttributesCode(context, textStyles, forExport) + "\n\n";
-  code += "\n}";
+  var code = "";
+  code += getEnumCode(textStyles) + "\n\n";
+  code += getFontColorExtension(context, textStyles, forExport) + "\n\n";
+  code += getFontsExtension(context, textStyles, forExport) + "\n\n"; 
+  code += getKerningExtension(context, textStyles, forExport) + "\n\n";
+  code += getLineHeightExtension(context, textStyles, forExport) + "\n\n";
+    
   return code
 }
 
@@ -58,56 +61,16 @@ module.exports = { getTextStylesSwiftFileContent, getTextStylesSwiftSnippet, get
 // Private functions
 var camelCase = require('camel-case')
 
-function getSwiftConvenienceStringExt() {
-  return `extension String {
-  func styled(as style: TextStyle) -> NSAttributedString {
-    return NSAttributedString(string: self,
-                              attributes: style.attributes)
-  }
-}`;
+function getSwiftConvenienceStringExtensions() {
+  return "";
 }
 
 function getSwiftFontImportCode() {
-  const usesSwiftGen = context.getOption("fontFormat") == "swiftgen";
-
-  var code = `#if os(OSX)
-import AppKit.NSFont
-`;
-
-  if (!usesSwiftGen) {
-    code += "internal typealias Font = NSFont\n";
-  }
-
-  code += `#elseif os(iOS) || os(tvOS) || os(watchOS)
-import UIKit.UIFont
-`;
-
-  if (!usesSwiftGen) {
-    code += "internal typealias Font = UIFont\n";
-  }
-
-  code += "#endif\n";
+  var code = "";
   return code;
 }
 
 function getFontSwiftType(context, forExport) {
-  if (forExport) {
-    return "Font";
-  }
-
-  const frameworkOption = context.getOption("snippetFramework");
-
-  //Forced snippets frameworks
-  if (frameworkOption == "forceAppKit") {
-    return "NSFont";
-  } else if (frameworkOption == "forceUIKit") {
-    return "UIFont";
-  }
-
-  //Default snippet framework
-  if (context.project.type == "osx") {
-    return "NSFont";
-  }
   return "UIFont";
 }
 
@@ -115,10 +78,28 @@ function getEnumCode(textStyles) {
   var code = "enum TextStyle {\n";
 
   for(var textStyle of textStyles) {
-    code += utils.tab(1) + "case " + camelCase(textStyle.name) + "\n";
+    code += utils.tab(1) + "case " + camelCase(textStyle.name) + "(color: UIColor? = nil)\n";
   }
 
-  code += "}";
+  code +=utils.tab(1) + "var color: UIColor {\n";
+  code +=utils.tab(2) + "switch self {\n";
+  code +=utils.tab(3) + "case \n";
+  for(var textStyle of textStyles) {
+    code += utils.tab(4) + "." + camelCase(textStyle.name) + "(color: let color),\n";
+  }
+  code =  code.slice(0, -2);
+  code += ":\n\n";
+  code += utils.tab(3)+"if color != nil {\n";
+  code += utils.tab(4)+"return color!\n";
+  code += utils.tab(3)+"}\n\n";
+
+  code += utils.tab(3)+"if let defaultColor = TextStyle.provider?.defaultColorFor(style: self) {\n";
+  code += utils.tab(4)+"return defaultColor";
+  code += utils.tab(3)+"}\n\n";
+  code += utils.tab(3)+"return .systemPink\n";
+  code += utils.tab(2)+"}\n";
+  code += utils.tab(1)+"}\n";
+  code += utils.tab(0)+"}\n";
   return code;
 }
 
@@ -137,6 +118,160 @@ function getAllAttributesCode(context, textStyles, forExport) {
   }
 
   code += utils.tab(1) + "}";
+  return code;
+}
+
+function getFontsExtension(context, textStyles, forExport) {
+  
+  const fontType = getFontSwiftType(context, forExport);
+  var code = "extension Provider {\n";
+  code += utils.tab(1) + "func fontFor(style: TextStyle) -> "+fontType+"? {\n";
+  
+    
+  if (textStyles.length == 0) {
+    code += utils.tab(2) + "return nil\n"
+  } else {
+    code += utils.tab(2) + "switch style {\n";
+    for(var textStyle of textStyles) {
+      code += utils.tab(3) + "case ." + camelCase(textStyle.name) + ":\n";
+    
+      const fontFormat = context.getOption("fontFormat");
+      if (fontFormat == "system") {
+        code += utils.tab(4) +"return "+ `${fontType}(name: "${textStyle.fontFace}", size: ${textStyle.fontSize})`
+      } else if (fontFormat == "swiftgen") {
+        code += utils.tab(4) +"return "+ `FontFamily.${textStyle.fontFamily}.${textStyle.weightText}.font(size: ${textStyle.fontSize})`;
+      }
+      code +="\n";
+    }
+    code += utils.tab(3) + "}\n";
+  }
+  code += utils.tab(1) + "}\n";
+  code += "}";
+  return code;
+}
+
+function getKerningExtension(context, textStyles, forExport) {
+  
+  var code = "extension Provider {\n";
+  code += utils.tab(1) + "func kerningFor(style: TextStyle) -> CGFloat? {\n";
+   
+  if (textStyles.length == 0) {
+    code += utils.tab(2) + "return nil\n"
+  } else {
+    code += utils.tab(2) + "switch style {\n";
+
+    var casesWithoutLetterspacing = ""
+    for(var textStyle of textStyles) {
+      
+      if (typeof textStyle.letterSpacing !== 'undefined' && textStyle.letterSpacing != 0) {
+        code += utils.tab(3) + "case ." + camelCase(textStyle.name) + ":\n";
+        code += utils.tab(4) + "return " + textStyle.letterSpacing;
+        code +="\n";
+      }else{
+        if(casesWithoutLetterspacing == ""){
+          casesWithoutLetterspacing = "case ." + camelCase(textStyle.name)
+        }else{
+          casesWithoutLetterspacing += ", ." + camelCase(textStyle.name)
+        }
+      }
+    }
+
+    if(casesWithoutLetterspacing != ""){
+      code += utils.tab(3) + casesWithoutLetterspacing + ":\n"
+      code += utils.tab(4) + "return nil\n";
+    }
+
+    code += utils.tab(3) + "}\n";
+    
+  }
+
+
+  code += utils.tab(1) + "}\n";
+  code += "}";
+  return code;
+}
+
+function getLineHeightExtension(context, textStyles, forExport) {
+  
+  
+  var code = "extension Provider {\n";
+  code += utils.tab(1) + "func lineHeightMultipleFor(style: TextStyle) -> CGFloat {\n";
+   
+  
+  if (textStyles.length == 0) {
+    code += utils.tab(2) + "return 1\n"
+  } else {
+    code += utils.tab(2) + "switch style {\n";
+
+    var casesWithoutLetterspacing = ""
+    for(var textStyle of textStyles) {
+      
+      if (typeof textStyle.lineHeight !== 'undefined' && textStyle.lineHeight !== textStyle.fontSize) {
+        code += utils.tab(3) + "case ." + camelCase(textStyle.name) + ":\n";
+        code += utils.tab(4) + "return " + (textStyle.lineHeight / textStyle.fontSize);
+        code +="\n";
+      }else{
+        if(casesWithoutLetterspacing == ""){
+          casesWithoutLetterspacing = "case ." + camelCase(textStyle.name)
+        }else{
+          casesWithoutLetterspacing += ", ." + camelCase(textStyle.name)
+        }
+      }
+    }
+
+    if(casesWithoutLetterspacing != ""){
+      code += utils.tab(3) + casesWithoutLetterspacing + ":\n"
+      code += utils.tab(4) + "return 1\n";
+    }
+
+    code += utils.tab(3) + "}\n";
+    
+  }
+
+
+  code += utils.tab(1) + "}\n";
+  code += "}";
+  return code;
+}
+
+function getFontColorExtension(context, textStyles, forExport) {
+  
+  var code = "extension Provider {\n";
+  code += utils.tab(1) + "func defaultColorFor(style: TextStyle) -> UIColor? {\n";
+  
+  if (textStyles.length == 0) {
+    code += utils.tab(2) + "return nil\n"
+  } else {
+    code += utils.tab(2) + "switch style {\n";
+
+    var casesWithoutLetterspacing = ""
+    for(var textStyle of textStyles) {
+      
+      if (typeof textStyle.lineHeight !== 'undefined' && textStyle.lineHeight !== textStyle.fontSize) {
+        code += utils.tab(3) + "case ." + camelCase(textStyle.name) + ":\n";
+        code += utils.tab(4) + "return " + getColorCode(context, textStyle.color, forExport);
+        code +="\n";
+      }else{
+        if(casesWithoutLetterspacing == ""){
+          casesWithoutLetterspacing = "case ." + camelCase(textStyle.name)
+        }else{
+          casesWithoutLetterspacing += ", ." + camelCase(textStyle.name)
+        }
+      }
+    }
+
+    if(casesWithoutLetterspacing != ""){
+      code += utils.tab(3) + casesWithoutLetterspacing + ":\n"
+      code += utils.tab(4) + "return nil\n";
+    }
+
+    code += utils.tab(3) + "}\n";
+    
+  }
+
+
+  code += utils.tab(1) + "}\n";
+  code += "}";
   return code;
 }
 

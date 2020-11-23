@@ -72,15 +72,7 @@ function getColorStructName(context) {
 }
 
 function getSwiftColorImport() {
-  return `#if os(OSX)
-  import AppKit.NSColor
-  internal typealias Color = NSColor
-#elseif os(iOS) || os(tvOS) || os(watchOS)
-  import UIKit.UIColor
-  internal typealias Color = UIColor
-#endif
-
-`;
+  return `import UIKit.UIColor`;
 }
 
 module.exports = { getColorsSwiftSnippet,
@@ -94,23 +86,6 @@ module.exports = { getColorsSwiftSnippet,
 // Private functions
 
 function getColorSwiftType(context, forExport) {
-  if (forExport) {
-    return "Color";
-  }
-
-  const frameworkOption = context.getOption("snippetFramework");
-
-  //Forced snippets frameworks
-  if (frameworkOption == "forceAppKit") {
-    return "NSColor";
-  } else if (frameworkOption == "forceUIKit") {
-    return "UIColor";
-  }
-
-  //Default snippet framework
-  if (context.project.type == "osx") {
-    return "NSColor";
-  }
   return "UIColor";
 }
 
